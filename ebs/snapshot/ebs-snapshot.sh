@@ -1,6 +1,8 @@
 #!/bin/bash
 export PATH=$PATH:/usr/local/bin/:/usr/bin
 
+command_name="ebs-snapshot.sh"
+
 # Safety feature: exit script if error is returned, or if variables not set.
 # Exit if a pipeline results in an error.
 set -ue
@@ -28,11 +30,12 @@ set -o pipefail
 ## Variable Declartions ##
 
 # Get Instance Details
-instance_id=$(wget -q -O- http://169.254.169.254/latest/meta-data/instance-id)
-region=$(wget -q -O- http://169.254.169.254/latest/meta-data/placement/availability-zone | sed -e 's/\([1-9]\).$/\1/g')
+#instance_id=$(wget -q -O- http://169.254.169.254/latest/meta-data/instance-id)
+aws_cli_profile='ebs-snapshot'
+#region=$(wget -q -O- http://169.254.169.254/latest/meta-data/placement/availability-zone | sed -e 's/\([1-9]\).$/\1/g')
 
 # Set Logging Options
-logfile="/var/log/ebs-snapshot.log"
+logfile="/var/log/aws-tools/ebs-snapshot.log"
 logfile_max_lines="5000"
 
 # How many days do you wish to retain backups for? Default: 7 days
@@ -41,6 +44,16 @@ retention_date_in_seconds=$(date +%s --date "$retention_days days ago")
 
 
 ## Function Declarations ##
+
+
+# Function: Print usage.
+print_usage() {
+  cat <<EOF
+$command_name,
+Usage
+
+EOF
+}
 
 # Function: Setup logfile and redirect stdout/stderr.
 log_setup() {
@@ -72,35 +85,35 @@ snapshot_volumes() {
   for volume_id in $volume_list; do
     log "Volume ID is $volume_id"
 
-    # Get the attched device name to add to the description so we can easily tell which volume this is.
-    device_name=$(aws ec2 describe-volumes --region $region --output=text --volume-ids $volume_id --query 'Volumes[0].{Devices:Attachments[0].Device}')
+    # Get the attached device name to add to the description so we can easily tell which volume this is.
+    device_name=$(aws ec2 describe-volumes --profile $aws_cli_profile --region $region --output=text --volume-ids $volume_id --query 'Volumes[0].{Devices:Attachments[0].Device}')
 
     # Take a snapshot of the current volume, and capture the resulting snapshot ID
-    snapshot_description="$(hostname)-$device_name-backup-$(date +%Y-%m-%d)"
+    snapshot_description="${instance_hostname}-$device_name-backup-$(date +%Y-%m-%d)"
 
-    snapshot_id=$(aws ec2 create-snapshot --region $region --output=text --description $snapshot_description --volume-id $volume_id --query SnapshotId)
+    snapshot_id=$(aws ec2 create-snapshot --profile $aws_cli_profile --region $region --output=text --description $snapshot_description --volume-id $volume_id --query 'SnapshotId')
     log "New snapshot is $snapshot_id"
 
     # Add a "CreatedBy:AutomatedBackup" tag to the resulting snapshot.
     # Why? Because we only want to purge snapshots taken by the script later, and not delete snapshots manually taken.
-    aws ec2 create-tags --region $region --resource $snapshot_id --tags Key=CreatedBy,Value=AutomatedBackup
+    aws ec2 create-tags --profile $aws_cli_profile --region $region --resource $snapshot_id --tags Key=CreatedBy,Value=AutomatedBackup
   done
 }
 
 # Function: Cleanup all snapshots associated with this instance that are older than $retention_days
 cleanup_snapshots() {
   for volume_id in $volume_list; do
-    snapshot_list=$(aws ec2 describe-snapshots --region $region --output=text --filters "Name=volume-id,Values=$volume_id" "Name=tag:CreatedBy,Values=AutomatedBackup" --query Snapshots[].SnapshotId)
+    snapshot_list=$(aws ec2 describe-snapshots --profile $aws_cli_profile --region $region --output=text --filters "Name=volume-id,Values=$volume_id" "Name=tag:CreatedBy,Values=AutomatedBackup" --query 'Snapshots[].SnapshotId')
     for snapshot in $snapshot_list; do
       log "Checking $snapshot..."
       # Check age of snapshot
-      snapshot_date=$(aws ec2 describe-snapshots --region $region --output=text --snapshot-ids $snapshot --query Snapshots[].StartTime | awk -F "T" '{printf "%s\n", $1}')
+      snapshot_date=$(aws ec2 describe-snapshots --profile $aws_cli_profile --region $region --output=text --snapshot-ids $snapshot --query 'Snapshots[].StartTime' | awk -F "T" '{printf "%s\n", $1}')
       snapshot_date_in_seconds=$(date "--date=$snapshot_date" +%s)
-      snapshot_description=$(aws ec2 describe-snapshots --snapshot-id $snapshot --region $region --query Snapshots[].Description)
+      snapshot_description=$(aws ec2 describe-snapshots --profile $aws_cli_profile --region $region --snapshot-id $snapshot --query 'Snapshots[].Description')
 
       if (( $snapshot_date_in_seconds <= $retention_date_in_seconds )); then
         log "DELETING snapshot $snapshot. Description: $snapshot_description ..."
-        aws ec2 delete-snapshot --region $region --snapshot-id $snapshot
+        aws ec2 delete-snapshot --profile $aws_cli_profile --region $region --snapshot-id $snapshot
       else
         log "Not deleting snapshot $snapshot. Description: $snapshot_description ..."
       fi
@@ -114,8 +127,19 @@ cleanup_snapshots() {
 log_setup
 prerequisite_check
 
+while getopts i:r:p: option; do
+  case "$option" in
+    i) instance_id="$OPTARG" ;;
+    r) region="$OPTARG" ;;
+    p) aws_cli_profile="$OPTARG" ;;
+    *) print_usage; exit 3 ;;
+  esac
+done
+
+instance_hostname=$(aws ec2 describe-tags --profile $aws_cli_profile --region $region --output=text --filter "Name=resource-id,Values=i-86054b39" "Name=key,Values=fqdn" --query 'Tags[].Value')
+
 # Grab all volume IDs attached to this instance
-volume_list=$(aws ec2 describe-volumes --region $region --filters Name=attachment.instance-id,Values=$instance_id --query Volumes[].VolumeId --output text)
+volume_list=$(aws ec2 describe-volumes --profile $aws_cli_profile --region $region --output=text --filters Name=attachment.instance-id,Values=$instance_id --query Volumes[].VolumeId)
 
 snapshot_volumes
 cleanup_snapshots
