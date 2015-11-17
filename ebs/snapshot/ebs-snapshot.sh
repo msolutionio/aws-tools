@@ -33,7 +33,7 @@ set -o pipefail
 instance_id=''
 
 # Set Logging Options
-logfile="/var/log/aws-tools/ebs-snapshot.log"
+logfile="/var/log/ebs-snapshot.log"
 logfile_max_lines="5000"
 
 # How many days do you wish to retain backups for? Default: 7 days
