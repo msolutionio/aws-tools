@@ -43,12 +43,49 @@ retention_date_in_seconds=$(date +%s --date "$retention_days days ago")
 
 ## Function Declarations ##
 
-
 # Function: Print usage.
 print_usage() {
   cat <<EOF
 $command_name,
 Usage
+    $command_name 
+            [-v <EBS Volume Ids>] [-p <AWS CLI profile>] [-r <AWS region>]
+
+    Retrieved all the EBS volume ids of your Amazon Web Service (AWS) Virtual
+    Private Cloud (VPC).
+    Create snapshot for each one of them with a description matching the
+    pattern:
+      'vol-aaaaaaaa-i-bbbbbbbb-backup-2000-12-31'
+    Add a tag 'CreatedBy' with the value 'AutomatedBackup' to differenciate the
+    snapshots.
+    Add a tag 'Name' with the name of the instance and the device name of the
+    EBS volume, if there is no name the id is used instead.
+
+    Check if one of the snapshot is older than 7 days and delete it if one is
+    found.
+
+    The snapshots are created before the deletion of any previous snapshots.
+    And if the creation of one snapshot failed the script is exited avoiding
+    the deletion of any previous snapshot.
+
+    -v Volume Id (string)
+        Create and delete snapshots only for the EBS volume ids provided.
+        If more than one id is provided, use quotes:
+            $command_name -v "vol-aaaaaaaa vol-bbbbbbbb"
+        By default the creation and delation of snapshots will happen for all
+        the EBS of your VPC.
+
+    -p AWS CLI profile (string)
+        Use the AWS Command Line Interface profile provided instead of the
+        'ebs-snapshot' profile by default. By default the configuration file
+        location for the different profile is '\$HOME/.aws/config'.
+
+    -r AWS Region (string)
+        Use the provided region to search for EBS.
+        By default the region value is 'us-east-1'.
+
+    -h
+        Print this help.
 
 EOF
 }
@@ -62,11 +99,12 @@ default_value() {
 
 # Function: Setup command line arguments
 options_setup() {
-  while getopts r:v:p: option; do
+  while getopts r:v:p:h option; do
     case "$option" in
       r) region="$OPTARG" ;;
       v) volume_list="$OPTARG" ;;
       p) aws_cli_profile="$OPTARG" ;;
+      h) print_usage; exit 0 ;;
       *) print_usage; exit 3 ;;
     esac
   done
