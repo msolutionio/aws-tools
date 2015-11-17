@@ -29,10 +29,8 @@ set -o pipefail
 
 ## Variable Declartions ##
 
-# Get Instance Details
-#instance_id=$(wget -q -O- http://169.254.169.254/latest/meta-data/instance-id)
-aws_cli_profile='ebs-snapshot'
-#region=$(wget -q -O- http://169.254.169.254/latest/meta-data/placement/availability-zone | sed -e 's/\([1-9]\).$/\1/g')
+# Instances Details
+instance_id=''
 
 # Set Logging Options
 logfile="/var/log/aws-tools/ebs-snapshot.log"
@@ -53,6 +51,25 @@ $command_name,
 Usage
 
 EOF
+}
+
+# Function: Set default value to the differents global variables
+default_value() {
+  aws_cli_profile='ebs-snapshot'
+  region='us-east-1'
+  volume_list=$(aws ec2 describe-volumes --profile $aws_cli_profile --region $region --output=text --query Volumes[].VolumeId)
+}
+
+# Function: Setup command line arguments
+options_setup() {
+  while getopts r:v:p: option; do
+    case "$option" in
+      r) region="$OPTARG" ;;
+      v) volume_list="$OPTARG" ;;
+      p) aws_cli_profile="$OPTARG" ;;
+      *) print_usage; exit 3 ;;
+    esac
+  done
 }
 
 # Function: Setup logfile and redirect stdout/stderr.
@@ -85,18 +102,32 @@ snapshot_volumes() {
   for volume_id in $volume_list; do
     log "Volume ID is $volume_id"
 
-    # Get the attached device name to add to the description so we can easily tell which volume this is.
-    device_name=$(aws ec2 describe-volumes --profile $aws_cli_profile --region $region --output=text --volume-ids $volume_id --query 'Volumes[0].{Devices:Attachments[0].Device}')
+    # Get the attached instance id to add to the description so we can easily tell which volume this is.
+    instance_id=$(aws ec2 describe-volumes --profile $aws_cli_profile --region $region --output=text --volume-ids $volume_id --query 'Volumes[0].Attachments[0].InstanceId')
 
     # Take a snapshot of the current volume, and capture the resulting snapshot ID
-    snapshot_description="${instance_hostname}-$device_name-backup-$(date +%Y-%m-%d)"
+    if [ -z $instance_id ]; then
+      instance_id='detached'
+    fi
+    snapshot_description="$volume_id-$instance_id-backup-$(date +%Y-%m-%d)"
 
     snapshot_id=$(aws ec2 create-snapshot --profile $aws_cli_profile --region $region --output=text --description $snapshot_description --volume-id $volume_id --query 'SnapshotId')
     log "New snapshot is $snapshot_id"
 
+    volume_name=$(aws ec2 describe-volumes --profile $aws_cli_profile --region $region --output=text --volume-ids $volume_id --query 'Volumes[0].Attachments[0].Device')
+    instance_hostname=$(aws ec2 describe-tags --profile $aws_cli_profile --region $region --output=text --filter "Name=resource-id,Values=$instance_id" "Name=key,Values=fqdn" --query 'Tags[].Value')
+
+    if [ -z $instance_hostname ]; then
+      instance_hostname=$instance_id
+    fi
+    if [ -z $volume_name ]; then
+      volume_name=$volume_id
+    fi
+    aws ec2 create-tags --profile $aws_cli_profile --region $region --resource $snapshot_id --tags "Key=Name,Value=$instance_hostname-$volume_name"
+
     # Add a "CreatedBy:AutomatedBackup" tag to the resulting snapshot.
     # Why? Because we only want to purge snapshots taken by the script later, and not delete snapshots manually taken.
-    aws ec2 create-tags --profile $aws_cli_profile --region $region --resource $snapshot_id --tags Key=CreatedBy,Value=AutomatedBackup
+    aws ec2 create-tags --profile $aws_cli_profile --region $region --resource $snapshot_id --tags "Key=CreatedBy,Value=AutomatedBackup"
   done
 }
 
@@ -127,20 +158,8 @@ cleanup_snapshots() {
 log_setup
 prerequisite_check
 
-while getopts i:r:p: option; do
-  case "$option" in
-    i) instance_id="$OPTARG" ;;
-    r) region="$OPTARG" ;;
-    p) aws_cli_profile="$OPTARG" ;;
-    *) print_usage; exit 3 ;;
-  esac
-done
-
-instance_hostname=$(aws ec2 describe-tags --profile $aws_cli_profile --region $region --output=text --filter "Name=resource-id,Values=i-86054b39" "Name=key,Values=fqdn" --query 'Tags[].Value')
-
-# Grab all volume IDs attached to this instance
-volume_list=$(aws ec2 describe-volumes --profile $aws_cli_profile --region $region --output=text --filters Name=attachment.instance-id,Values=$instance_id --query Volumes[].VolumeId)
+default_value
+options_setup "$@"
 
 snapshot_volumes
 cleanup_snapshots
-
