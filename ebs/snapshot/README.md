@@ -8,15 +8,16 @@ EBS snapshot tool
 ##How it works?##
 
 1.Search all your EBS volumes
-2.Create a snapshot for each one
-3.Delete all snapshot made by the script older than a week
 
-=================
+2.Create a snapshot for each one
+
+3.Delete all snapshot made by the script older than a week
 
 ##What do you need to use it?##
 
 ###Identify and Access Management (IAM) policy###
 First you will need to create a new IAM policy and attach it to the user who will run the script (you can create a new user or use an existing one).
+
 Create the new policy with the following attribute (you can find it in the **ebs-snapshot_aws-iam-policy.json** file):
 ```json
 {
