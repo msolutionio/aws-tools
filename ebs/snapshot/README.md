@@ -3,8 +3,6 @@ EBS snapshot tool
 
 ####Backup all your EBS volumes on Amazon Web Services (AWS)####
 
-=================
-
 ##How it works?##
 
 1.Search all your EBS volumes
@@ -51,7 +49,7 @@ Refer to [the official AWS documentation](http://docs.aws.amazon.com/cli/latest/
 ####Configuration####
 
 The AWS CLI need to be configured to use the right credentials. In order to do this you will create a profile for the AWS CLI.
-By default the script call the profile name *ebs-snapshot* but you can create an other and use it with the profile option `-p` of the script.
+By default the script call the profile name *ebs-snapshot* but you can create an other one and use it with the profile option `-p` of the script.
 
 You can use the command **aws configure** to set a default profile for the AWS CLI tool
 
