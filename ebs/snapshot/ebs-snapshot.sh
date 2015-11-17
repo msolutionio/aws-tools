@@ -29,9 +29,6 @@ set -o pipefail
 
 ## Variable Declartions ##
 
-# Instances Details
-instance_id=''
-
 # Set Logging Options
 logfile="/var/log/ebs-snapshot.log"
 logfile_max_lines="5000"
