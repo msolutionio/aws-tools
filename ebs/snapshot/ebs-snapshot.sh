@@ -81,6 +81,13 @@ Usage
         Use the provided region to search for EBS.
         By default the region value is 'us-east-1'.
 
+    -l
+        List all the EBS volumes. Does not create or delete any snapshot.
+        The output is:
+          the volume id,
+          the instance id the volume is attached ('none' if it is not attached)
+          the tags associated to the EBS volume
+
     -h
         Print this help.
 
@@ -94,13 +101,19 @@ default_value() {
   volume_list=$(aws ec2 describe-volumes --profile $aws_cli_profile --region $region --output=text --query Volumes[].VolumeId)
 }
 
+# Function: Print volume list
+print_volumes() {
+  aws ec2 describe-volumes --profile $aws_cli_profile --region $region --output=text --query 'Volumes[].{ID:VolumeId,Instance:Attachments[0].InstanceId,Tag:Tags}'
+}
+
 # Function: Setup command line arguments
 options_setup() {
-  while getopts r:v:p:h option; do
+  while getopts r:v:p:hl option; do
     case "$option" in
       r) region="$OPTARG" ;;
       v) volume_list="$OPTARG" ;;
       p) aws_cli_profile="$OPTARG" ;;
+      l) print_volumes; exit 0 ;;
       h) print_usage; exit 0 ;;
       *) print_usage; exit 3 ;;
     esac
