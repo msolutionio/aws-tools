@@ -9,7 +9,7 @@ EBS snapshot tool
 
 2.Create a snapshot for each one
 
-3.Delete all snapshot made by the script older than a week
+3.Delete all snapshot made by the script older than 30 days
 
 ##What do you need to use it?##
 
