@@ -1,5 +1,20 @@
 #!/usr/bin/python
 
+## Automatic EBS Volume Snapshot Creation & Clean-Up Python Script
+#
+# Written by MSolution. (http://www.msolution.io)
+# Script Github repo: https://raw.githubusercontent.com/msolutionio/aws-tools/master/ebs/snapshot/ebs-snapshot.py
+#
+# PURPOSE: This Python script can be used to take automatic snapshots of your EBS volumes. Script process:
+# - Determine the list of EBS volumes to snapshot
+# - Gather information for each EBS volume
+# - Take a snapshot of each EBS volume
+# - The script will then delete all associated snapshots taken by the script that are older than the specified expiration value associated at the snapshot creation (by default 30 days)
+#
+# DISCLAIMER: This script deletes snapshots (though only the ones that it creates). 
+# Make sure that you understand how the script works. No responsibility accepted in event of accidental data loss.
+#
+
 import sys
 import argparse
 import logging
@@ -8,8 +23,6 @@ import botocore
 from datetime import datetime, date
 import time
 
-command_name='ebs-snapshot.py'
-
 ## Function Declarations
 
 # Function: Initialize logging
@@ -17,12 +30,15 @@ def logging_setup():
     logger = logging.getLogger('ebs-snapshot')
     logger.setLevel(logging.DEBUG)
 
+    # Send all the level of log in the log file
     file_handler = logging.FileHandler('/var/log/ebs-snapshot.log')
     file_handler.setLevel(logging.DEBUG)
 
+    # Display error on the console
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.ERROR)
 
+    # Setup a log format
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
@@ -70,6 +86,7 @@ def parse_options():
             help = 'volume help')
     return parser.parse_args()
 
+# Function: Initialize the AWS API with the provided credential or the default one
 def initialize_aws_api():
     try:
         logger.info('Initializing AWS API with profile: ' + args.profile + ' and region: ' + args.region)
@@ -89,6 +106,7 @@ def initialize_aws_api():
         logger.error('An error occured when Initializing AWS API with profile: ' + args.profile + ' and region: ' + args.region + ': ' + str(e))
         sys.exit(2)
 
+# Function: Gather information about the provided volume ID
 def get_volume_infos(volume_id):
     try:
         logger.info('Getting informations for the volume ' + volume_id)
@@ -103,6 +121,7 @@ def get_volume_infos(volume_id):
         logger.error('An error occured when Getting informations for the volume ' + volume_id + ': ' + str(e))
         sys.exit(2)
 
+# Function: Create a snapshot for the provided volume ID
 def create_snapshot(volume_id, description):
     try:
         logger.info('Creating snapshot for the volume ' + volume_id)
@@ -119,6 +138,7 @@ def create_snapshot(volume_id, description):
         logger.error('An error occured when Created snapshot for the volume ' + volume_id + ': ' + str(e))
         sys.exit(2)
 
+# Function: Gather the hostname of the instance ID provided
 def get_instance_hostname(instance_id):
     try:
         logger.info('Getting instance hostname for the instance ' + instance_id)
@@ -133,6 +153,8 @@ def get_instance_hostname(instance_id):
                         'Values': ['fqdn']
                     }
                 ])
+
+        # If the 'fqdn' tag is not found, we use the instance ID instead
         if len(instance_hostname['Tags']) > 0:
             return instance_hostname['Tags'][0]['Value']
         else:
@@ -144,6 +166,7 @@ def get_instance_hostname(instance_id):
         logger.error('An error occured when Getting instance hostname for the instance ' + instance_id + ': ' + str(e))
         sys.exit(2)
 
+# Function: Create a tag 'key' for the resource 'resource' with the value 'value'
 def create_tag(resource, key, value):
     try:
         logger.info('Creating tag for the resource ' + resource)
@@ -189,6 +212,7 @@ def snapshot_volumes(volume_list):
 
         logger.info('Snapshotted volume id ' + volume_id)
 
+# Function: Get a list of snapshots associated with the volume IDs provided, return a list of structure not only the snapshot ID
 def get_snapshots_info(volume_list):
     try:
         logger.info('Getting snapshots informations')
@@ -211,6 +235,7 @@ def get_snapshots_info(volume_list):
         logger.error('An error occured when Getting snapshots informations: ' + str(e))
         sys.exit(2)
 
+# Function: Check if the snapshot is expired
 def is_snapshot_expired(snapshot_info):
     for tag in snapshot_info['Tags']:
         if tag['Key'] == 'ExpirationTime':
@@ -218,6 +243,10 @@ def is_snapshot_expired(snapshot_info):
             break
     else:
         expiration_time = None
+        logger.warning('Snapshot ' + snapshot_id + ' does not have an ExpirationTime tag')
+
+    # If an ExpirationTime tag is found, we compare the actual datetime value minus the snapshot creation datetime with the expiration duration value
+    # Datetime are UTC+0 based
     if (expiration_time != None) and (time.mktime(datetime.utcnow().timetuple()) - time.mktime(snapshot_info['StartTime'].timetuple()) > expiration_time):
         return True
     else:
@@ -264,6 +293,7 @@ def get_volume_ids_list():
 
 ## Variable Declarations ##
 
+command_name='ebs-snapshot.py'
 seconds_in_day = 60 * 60 * 24
 logger = logging_setup()
 args = parse_options()
