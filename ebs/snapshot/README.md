@@ -5,11 +5,11 @@ EBS snapshot tool
 
 ##How it works?##
 
-1.Search all your EBS volumes
+1.Search all your EBS volumes.
 
-2.Create a snapshot for each one
+2.Create a snapshot for each one with an expiration time (by default 30 days), this expiration time is only used for this script.
 
-3.Delete all snapshot made by the script older than 30 days
+3.Delete all snapshot made by the script older than the expiration date.
 
 ##What do you need to use it?##
 
@@ -40,36 +40,58 @@ Create the new policy with the following attribute (you can find it in the **ebs
 }
 ```
 
-###AWS Command Line Interface (CLI)###
-
-####Installation####
-
-Refer to [the official AWS documentation](http://docs.aws.amazon.com/cli/latest/userguide/installing.html) for the installation.
+###AWS Credentials###
 
 ####Configuration####
 
-The AWS CLI need to be configured to use the right credentials. In order to do this you will create a profile for the AWS CLI.
+The AWS Python SDK, used in the script, need to be configured to use the right credentials. In order to do this you will create a profile.
 By default the script call the profile name *ebs-snapshot* but you can create an other one and use it with the profile option `-p` of the script.
 
-You can use the command **aws configure** to set a default profile for the AWS CLI tool
-
-Create or modify the file **~/.aws/config** and add the credentials of the AWS user attached to the policy previously created (here is an example with a profile named *ebs-snapshot*):
+Create or modify the file **~/.aws/credentials** and add the credentials of the AWS user attached to the policy previously created (here is an example with a profile named *ebs-snapshot*):
 ```
-[profile ebs-snapshot]
+[ebs-snapshot]
 aws_access_key_id = YOUR_AWS_ACCESS_KEY_ID
 aws_secret_access_key = YOUR_AWS_SECRET_ACCESS_KEY
 region = YOUR_REGION
 ```
+You can have multiple profile define in this file.
+
+###Python and modules###
+
+####Installation####
+
+Install pip with:
+```bash
+sudo apt-get install python-pip -y
+```
+or
+```bash
+sudo yum install python-pip -y
+```
+according to your distribution.
+
+Now you will have to install the AWS SDK package:
+```bash
+sudo pip install boto3
+```
 
 ##How to use it?##
 
-Just run the script with:
+To run the script manually with use:
 ```bash
-sudo ./ebs-snapshot
+./ebs-snapshot
 ```
+This command will snapshot all your EBS volumes but can slow your instances while creating the differents snapshots.
+The snapshots are incremental so it would be faster the next times.
 
-Use the option `-p` to use a different profile than *ebs-snapshot*
+You can also specify the volumes you want to snapshot and attribute them a specific expiration time value (30 days by default).
 
-Use the option `-r` to set a different region
+Setup an automatic job with the crontab. For example every day at 3AM:
+```bash
+00 03 * * * root /path_to_script/ebs-snapshot.py
+```
+Don't forget to put your **credentials** file to **/root/.aws/credentials**
 
-Use the option `-v` to snapshot only the provided volumes
+##Logs##
+
+All the logs are stored in '/var/log/ebs-snapshot.log', so make sure you have right permissions to access this file.
