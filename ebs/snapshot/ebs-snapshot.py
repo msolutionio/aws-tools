@@ -31,7 +31,11 @@ def logging_setup():
     logger.setLevel(logging.DEBUG)
 
     # Send all the level of log in the log file
-    file_handler = logging.FileHandler('/var/log/ebs-snapshot.log')
+    try:
+        file_handler = logging.FileHandler('/var/log/ebs-snapshot.log')
+    except IOError as e:
+        print(str(e))
+        sys.exit(1)
     file_handler.setLevel(logging.DEBUG)
 
     # Display error on the console
@@ -83,7 +87,7 @@ def parse_options():
             '-l',
             '--list-volumes',
             action = 'store_true',
-            help = 'volume help')
+            help = 'List all EBS volumes')
     return parser.parse_args()
 
 # Function: Initialize the AWS API with the provided credential or the default one
@@ -276,20 +280,35 @@ def cleanup_snapshots(volume_list):
         else:
             logger.info('Not deleting snapshot ' + snapshot['SnapshotId'] + '. Description: ' + snapshot['Description'])
 
-def get_volume_ids_list():
+# Function: Return a list of array with all the EBS volumes informations
+def get_volumes_infos_list():
     try:
-        logger.info('Getting volume ids list')
-        volumes_info = ec2.describe_volumes()['Volumes']
-        volume_ids = []
-        for volume_info in volumes_info:
-            volume_ids.append(volume_info['VolumeId'])
-        return volume_ids
+        logger.info('Getting volumes informations list')
+        volumes_infos = ec2.describe_volumes()['Volumes']
+        return volumes_infos
     except botocore.exceptions.ClientError as e:
         logger.error(str(e))
         sys.exit(1)
     except Exception as e:
-        logger.error('An unknown error occured when Getting volume ids list: ' + str(e))
+        logger.error('An unknown error occured when Getting volumes informations list: ' + str(e))
         sys.exit(2)
+
+def get_volume_ids_list():
+    volume_ids = []
+    for volume_info in get_volumes_infos_list():
+        volume_ids.append(volume_info['VolumeId'])
+    return volume_ids
+
+# Function: Display EBS volumes informations
+def print_volumes_infos():
+    for volume_info in get_volumes_infos_list():
+        if len(volume_info['SnapshotId']) == 0:
+            volume_info['SnapshotId'] = 'No snapshot'
+        if volume_info['Attachments'] != None and len(volume_info['Attachments']) > 0:
+            print(volume_info['VolumeId'] + '	' + volume_info['SnapshotId'] + '	' + volume_info['Attachments'][0]['State'] + '	' + volume_info['Attachments'][0]['InstanceId'] + '	' + volume_info['Attachments'][0]['Device'])
+        else:
+            print(volume_info['VolumeId'] + '	' + volume_info['SnapshotId'])
+    sys.exit(0)
 
 ## Variable Declarations ##
 
@@ -303,6 +322,8 @@ ec2 = initialize_aws_api()
 
 try:
     logger.info('STARTING')
+    if args.list_volumes:
+        print_volumes_infos()
     if args.volume_ids == None:
         args.volume_ids = get_volume_ids_list()
     volume_ids_list = list(set(args.volume_ids))
@@ -315,5 +336,6 @@ except KeyboardInterrupt as e:
     sys.exit(1)
 except Exception as e:
     logger.error('An unknown error occured:' + str(e))
+    raise
     sys.exit(2)
 
