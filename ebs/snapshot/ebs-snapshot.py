@@ -66,21 +66,21 @@ def parse_options():
             '-p',
             '--profile',
             type = str,
-            nargs = '?',
+            nargs = 1,
             default = 'ebs-snapshot',
-            help = 'Use specific AWS profile (default \'ebs-default\')')
+            help = 'Use specific AWS profile (default \'ebs-snapshot\')')
     parser.add_argument(
             '-e',
             '--expire-after',
             type = int,
-            nargs = '?',
+            nargs = 1,
             default = 30,
             help = 'Define a specific expiration time in days (default 30 days)')
     parser.add_argument(
             '-r',
             '--region',
             type = str,
-            nargs = '?',
+            nargs = 1,
             default = 'us-east-1',
             help = 'Use specific AWS region (default \'us-east-1\')')
     parser.add_argument(
