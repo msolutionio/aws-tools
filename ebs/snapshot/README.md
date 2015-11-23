@@ -77,14 +77,14 @@ sudo pip install boto3
 
 ##How to use it?##
 
-To run the script manually with use:
+To run the script manually use:
 ```bash
 ./ebs-snapshot
 ```
 This command will snapshot all your EBS volumes but can slow your instances while creating the differents snapshots.
 The snapshots are incremental so it would be faster the next times.
 
-You can also specify the volumes you want to snapshot and attribute them a specific expiration time value (30 days by default).
+You can also specify the volumes you want to snapshot with the option *--volumes* or *-v* and attribute them a specific expiration time value, in days (30 days by default), with the option *--expire-after* or *-e*.
 
 Setup an automatic job with the crontab. For example every day at 3AM:
 ```bash
